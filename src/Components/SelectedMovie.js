@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { KEY } from "../App";
 import { Loader } from "./Loader";
 import { ErrorMessage } from "./ErrorMessage";
 import StarRating from "./StarRating/StarRating";
+import { useKey } from "../Hooks/useKey";
 
 export function SelectedMovie({
   selectedId,
@@ -14,6 +15,15 @@ export function SelectedMovie({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [userRating, setUserRating] = useState("");
+
+  const countRef = useRef(0);
+
+  useEffect(
+    function () {
+      if (userRating) countRef.current++;
+    },
+    [userRating]
+  );
 
   const isWatched = watched.map((movie) => movie.imdbID).includes(selectedId);
 
@@ -34,51 +44,39 @@ export function SelectedMovie({
     Genre: genre,
   } = movie;
 
+  useKey("escape", onCloseMovie);
+
   useEffect(
     function () {
-      function callback(e) {
-        if (e.code === "Escape") {
-          onCloseMovie();
+      async function getMovieDetails() {
+        try {
+          setIsLoading(true);
+
+          const res = await fetch(
+            `http://www.omdbapi.com/?apikey=${KEY}&i=${selectedId}`
+          );
+
+          if (!res.ok)
+            throw new Error(
+              "Something went wrong with getting the movie details"
+            );
+
+          const data = await res.json();
+          if (data.Response === "False") throw new Error("Movie not found");
+
+          setMovie(data);
+        } catch (err) {
+          console.error(err.message);
+          setError(err.message);
+        } finally {
+          setIsLoading(false);
         }
       }
 
-      document.addEventListener("keydown", callback);
-
-      return function () {
-        document.removeEventListener("keydown", callback);
-      };
+      getMovieDetails();
     },
-    [onCloseMovie]
+    [selectedId]
   );
-
-  useEffect(function () {
-    async function getMovieDetails() {
-      try {
-        setIsLoading(true);
-
-        const res = await fetch(
-          `http://www.omdbapi.com/?apikey=${KEY}&i=${selectedId}`
-        );
-
-        if (!res.ok)
-          throw new Error(
-            "Something went wrong with getting the movie details"
-          );
-
-        const data = await res.json();
-        if (data.Response === "False") throw new Error("Movie not found");
-
-        setMovie(data);
-      } catch (err) {
-        console.error(err.message);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    getMovieDetails();
-  }, []);
 
   useEffect(
     function () {
@@ -101,6 +99,7 @@ export function SelectedMovie({
       imdbRating: Number(imdbRating),
       runtime: Number(runtime.split(" ").at(0)),
       userRating,
+      countRatingDecision: countRef.current,
     };
 
     onAddWatched(newMovie);
